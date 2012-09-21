@@ -1,0 +1,131 @@
+<?php
+
+/**
+ * Implements hook_install().
+ */
+function dbr_install() {
+  $t = get_t();
+
+  // We define the node type as an associative array.
+  $dbr = array(
+    'type' => 'role_to_sell',
+    'name' => $t('Role to sell'),
+    'base' => 'node_content',
+    'description' => $t('This is a node to define a role to be sold.'),
+    'title_label' => $t('Title'),
+    'custom' => TRUE,
+  );
+  $content_type = node_type_set_defaults($dbr);
+
+  //We add a body field and set the body label immediately.
+  node_add_body_field($content_type, $t('Description'));
+
+  // Save the content type
+  node_type_save($content_type);
+
+  // Load the instance definition for our content type's body
+  $body_instance = field_info_instance('node', 'body', 'role_to_sell');
+  $body_instance['display']['default'] = array(
+    'label' => 'hidden',
+    'type' => 'text_summary_or_trimmed',
+  );
+  field_update_instance($body_instance);
+
+  // Create all the fields we are adding to our content type.
+  foreach (_dbr_installed_fields() as $field) {
+    field_create_field($field);
+  }
+
+  // Create all the instances for our fields.
+  foreach (_dbr_installed_instances() as $instance) {
+    $instance['entity_type'] = 'node';
+    $instance['bundle'] = $dbr['type'];
+    field_create_instance($instance);
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function dbr_uninstall() {
+
+  $sql = 'SELECT nid FROM {node} n WHERE n.type = :type';
+  $result = db_query($sql, array(':type' => 'role_to_sell'));
+  $nids = array();
+  foreach ($result as $row) {
+    $nids[] = $row->nid;
+  }
+
+  // Delete all the nodes at once
+  node_delete_multiple($nids);
+
+  foreach (array_keys(_dbr_installed_fields()) as $field) {
+    field_delete_field($field);
+  }
+
+  $instances = field_info_instances('node', 'role_to_sell');
+  foreach ($instances as $instance_name => $instance) {
+    field_delete_instance($instance);
+  }
+
+  // Delete our content type
+  node_type_delete('role_to_sell');
+
+  // Purge all field infromation
+  field_purge_batch(1000);
+}
+
+/**
+ * Returns a structured array defining the fields created by this content type.
+ */
+function _dbr_installed_fields() {
+  $t = get_t();
+  return array(
+    'dbr_amount' => array(
+      'field_name' => 'dbr_amount',
+      'type' => 'number_float',
+    ),
+    'dbr_role' => array(
+      'field_name' => 'dbr_role',
+      'cardinality' => FIELD_CARDINALITY_UNLIMITED,
+      'type' => 'field_user_roles_rid',
+    ),
+  );
+}
+
+/**
+ * Returns a structured array defining the instances for this content type.
+ */
+function _dbr_installed_instances() {
+  $t = get_t();
+  return array(
+    'dbr_amount' => array(
+      'field_name' => 'dbr_amount',
+      'label' => $t('The amount to pay to get the role.'),
+      'required' => 1,
+      'widget' => array(
+        'type' => 'number',
+        'weight' => '-2',
+      ),
+      'settings' => array(
+        'min' => '0',
+        'max' => '',
+        'suffix' => '€'
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'number_decimal',
+        ),
+      ),
+    ),
+    'dbr_role' => array(
+      'field_name' => 'dbr_role',
+      'label' => $t('The role that will be assigned.'),
+      'required' => 1,
+      'widget' => array(
+        'weight' => '-1',
+      ),
+    ),
+  );
+}

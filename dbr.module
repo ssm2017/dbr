@@ -1,0 +1,79 @@
+<?php
+
+function dbr_node_view($node, $build_mode = 'full') {
+  if ($node->type == 'role_to_sell') {
+    // check the status in the url to display a message to the user
+    if ($build_mode == 'full') {
+      $status = arg(2);
+      if (!is_null($status)) {
+        $message = '';
+        switch($status) {
+          case 'canceled':
+            $message = t('You have canceled the payment.');
+            break;
+          case 'finished':
+            $message = t('Thank you for your payment.');
+            break;
+        }
+        drupal_set_message($message, 'warning');
+      }
+    }
+    // check if the user already have these roles
+    $missing_roles = 0;
+    foreach ($node->dbr_role[$node->language]as $role) {
+      $rid = (int) $role['rid'];
+      if (!isset($GLOBALS['user']->roles[$rid])) {
+        $missing_roles++;
+      }
+    }
+    if ($missing_roles) {
+      // build the button
+      $amount = field_get_items('node', $node, 'dbr_amount');
+      $params = array(
+        'amount' => $amount[0]['value'],
+        'return_url' => $GLOBALS['base_url'] . '/user/' . $GLOBALS['user']->uid . '/transactions/finished',
+        'cancel_url' => $GLOBALS['base_url'] . '/node/' . $node->nid. '/canceled',
+        'button_url' => 'https://www.paypal.com/fr_XC/i/btn/btn_xpressCheckout.gif',
+        'button_text' => t('Pay'),
+        'item_name' => $node->title,
+        'custom' => array(
+          'nid' => $node->nid,
+          'uid' => $GLOBALS['user']->uid,
+          'module' => 'dbr',
+          'timestamp' => time(),
+        ),
+      );
+      $node->content['button'] = drupal_get_form('yadpm_crypted_payment_form', $params);
+    }
+  }
+}
+
+function dbr_yadpm_ipn_verified($ipn) {
+  if ($ipn['payment_status'] == 'Completed') {
+
+    // check if we have the good module ipn
+    if ($ipn['custom']['module'] == 'dbr') {
+
+      // get the user account
+      $account = user_load($ipn['custom']['uid']);
+
+      // get the roles to assign
+      $node = node_load($ipn['custom']['nid']);
+      $roles = array();
+      $user_roles = user_roles();
+      foreach ($node->dbr_role[$node->language]as $role) {
+        $rid = (int) $role['rid'];
+        if (!isset($account->roles[$rid])) {
+          $roles[$rid] = $user_roles[$rid];
+        }
+      }
+
+      // assign the roles to the user
+      if (count($roles)) {
+        $account_roles = $account->roles + $roles;
+        $account->original = clone $account;
+        user_save($account, array('roles' => $account_roles));
+      }
+    }
+  }
+}

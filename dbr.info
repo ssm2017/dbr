@@ -1,0 +1,6 @@
+name = dbr
+description = Buy a role using paypal.
+core = 7.x
+dependencies[] = field_user_roles
+dependencies[] = yadpm
+dependencies[] = number
